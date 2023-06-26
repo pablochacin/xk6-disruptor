@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"net"
 	"time"
 
 	"github.com/grafana/xk6-disruptor/pkg/agent"
@@ -16,13 +17,11 @@ import (
 func BuildHTTPCmd(env runtime.Environment, config *agent.Config) *cobra.Command {
 	disruption := http.Disruption{}
 	var duration time.Duration
-	var port uint
-	var target uint
-	var iface string
-	var upstreamHost string
+	var port string
+	var targetHost string
+	var targetPort string
 	transparent := true
 
-	//nolint: dupl
 	cmd := &cobra.Command{
 		Use:   "http",
 		Short: "http disruptor",
@@ -30,11 +29,11 @@ func BuildHTTPCmd(env runtime.Environment, config *agent.Config) *cobra.Command 
 			" When running as a transparent proxy requires NET_ADMIM capabilities for setting" +
 			" iptable rules.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if target == 0 {
+			if targetPort == "" {
 				return fmt.Errorf("target port for fault injection is required")
 			}
-			listenAddress := fmt.Sprintf(":%d", port)
-			upstreamAddress := fmt.Sprintf("http://%s:%d", upstreamHost, target)
+			listenAddress := net.JoinHostPort("", port)
+			upstreamAddress := "http://" + net.JoinHostPort(targetHost, targetPort)
 
 			proxyConfig := http.ProxyConfig{
 				ListenAddress:   listenAddress,
@@ -50,9 +49,8 @@ func BuildHTTPCmd(env runtime.Environment, config *agent.Config) *cobra.Command 
 			var redirector protocol.TrafficRedirector
 			if transparent {
 				tr := &iptables.TrafficRedirectionSpec{
-					Iface:           iface,
-					DestinationPort: target,
-					RedirectPort:    port,
+					TargetPort: targetPort,
+					ProxyPort:  port,
 				}
 
 				redirector, err = iptables.NewTrafficRedirector(tr, env.Executor())
@@ -87,11 +85,10 @@ func BuildHTTPCmd(env runtime.Environment, config *agent.Config) *cobra.Command 
 	cmd.Flags().StringSliceVarP(&disruption.Excluded, "exclude", "x", []string{}, "comma-separated list of path(s)"+
 		" to be excluded from disruption")
 	cmd.Flags().BoolVar(&transparent, "transparent", true, "run as transparent proxy")
-	cmd.Flags().StringVar(&upstreamHost, "upstream-host", "localhost",
+	cmd.Flags().StringVar(&targetHost, "upstream-host", "localhost",
 		"upstream host to redirect traffic to")
-	cmd.Flags().StringVarP(&iface, "interface", "i", "eth0", "interface to disrupt")
-	cmd.Flags().UintVarP(&port, "port", "p", 8000, "port the proxy will listen to")
-	cmd.Flags().UintVarP(&target, "target", "t", 0, "port the proxy will redirect request to")
+	cmd.Flags().StringVarP(&port, "port", "p", "8080", "port the proxy will listen to")
+	cmd.Flags().StringVarP(&targetPort, "target", "t", "", "port the proxy will redirect request to")
 
 	return cmd
 }
