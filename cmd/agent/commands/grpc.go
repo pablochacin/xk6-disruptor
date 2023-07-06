@@ -19,7 +19,7 @@ func BuildGrpcCmd(env runtime.Environment, config *agent.Config) *cobra.Command 
 	disruption := grpc.Disruption{}
 	var duration time.Duration
 	var port uint
-	var targetHost string
+	var upstreamHost string
 	var targetPort uint
 	transparent := true
 
@@ -35,7 +35,7 @@ func BuildGrpcCmd(env runtime.Environment, config *agent.Config) *cobra.Command 
 			}
 
 			listenAddress := net.JoinHostPort("", fmt.Sprint(port))
-			upstreamAddress := net.JoinHostPort(targetHost, fmt.Sprint(targetPort))
+			upstreamAddress := net.JoinHostPort(upstreamHost, fmt.Sprint(targetPort))
 
 			proxyConfig := grpc.ProxyConfig{
 				ListenAddress:   listenAddress,
@@ -88,7 +88,7 @@ func BuildGrpcCmd(env runtime.Environment, config *agent.Config) *cobra.Command 
 	cmd.Flags().StringSliceVarP(&disruption.Excluded, "exclude", "x", []string{}, "comma-separated list of grpc services"+
 		" to be excluded from disruption")
 	cmd.Flags().BoolVar(&transparent, "transparent", true, "run as transparent proxy")
-	cmd.Flags().StringVar(&targetHost, "upstream-host", "localhost",
+	cmd.Flags().StringVar(&upstreamHost, "upstream-host", "localhost",
 		"upstream host to redirect traffic to")
 
 	return cmd

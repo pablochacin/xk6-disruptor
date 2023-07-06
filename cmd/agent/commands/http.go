@@ -18,7 +18,7 @@ func BuildHTTPCmd(env runtime.Environment, config *agent.Config) *cobra.Command 
 	disruption := http.Disruption{}
 	var duration time.Duration
 	var port uint
-	var targetHost string
+	var upstreamHost string
 	var targetPort uint
 	transparent := true
 
@@ -34,7 +34,7 @@ func BuildHTTPCmd(env runtime.Environment, config *agent.Config) *cobra.Command 
 			}
 
 			listenAddress := net.JoinHostPort("", fmt.Sprint(port))
-			upstreamAddress := "http://" + net.JoinHostPort(targetHost, fmt.Sprint(targetPort))
+			upstreamAddress := "http://" + net.JoinHostPort(upstreamHost, fmt.Sprint(targetPort))
 
 			proxyConfig := http.ProxyConfig{
 				ListenAddress:   listenAddress,
@@ -86,7 +86,7 @@ func BuildHTTPCmd(env runtime.Environment, config *agent.Config) *cobra.Command 
 	cmd.Flags().StringSliceVarP(&disruption.Excluded, "exclude", "x", []string{}, "comma-separated list of path(s)"+
 		" to be excluded from disruption")
 	cmd.Flags().BoolVar(&transparent, "transparent", true, "run as transparent proxy")
-	cmd.Flags().StringVar(&targetHost, "upstream-host", "localhost",
+	cmd.Flags().StringVar(&upstreamHost, "upstream-host", "localhost",
 		"upstream host to redirect traffic to")
 	cmd.Flags().UintVarP(&port, "port", "p", 8080, "port the proxy will listen to")
 	cmd.Flags().UintVarP(&targetPort, "target", "t", 0, "port the proxy will redirect request to")
