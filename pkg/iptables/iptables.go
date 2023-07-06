@@ -43,8 +43,8 @@ import (
 const redirectLocalRule = "OUTPUT " + // For local traffic
 	"-t nat " + // Traversing the nat table
 	"-s 127.0.0.0/8 -d 127.0.0.0/8 " + // Coming from and directed to the loopback address, i.e. not the pod IP.
-	"-p tcp --dport %s " + // Sent to the upstream application's port
-	"-j REDIRECT --to-port %s" // Forward it to the proxy address
+	"-p tcp --dport %d " + // Sent to the upstream application's port
+	"-j REDIRECT --to-port %d" // Forward it to the proxy address
 
 // redirectExternalRule is a netfilter rule that intercepts external traffic directed to the application and redirects
 // it to the proxy.
@@ -53,8 +53,8 @@ const redirectLocalRule = "OUTPUT " + // For local traffic
 const redirectExternalRule = "PREROUTING " + // For remote traffic
 	"-t nat " + // Traversing the nat table
 	"! -i lo " + // Not coming form loopback. This is technically not needed, but doesn't hurt and helps readability.
-	"-p tcp --dport %s " + // Sent to the upstream application's port
-	"-j REDIRECT --to-port %s" // Forward it to the proxy address
+	"-p tcp --dport %d " + // Sent to the upstream application's port
+	"-j REDIRECT --to-port %d" // Forward it to the proxy address
 
 // resetLocalRule is a netfilter rule that resets established connections (i.e. that have not been redirected) coming
 // to and from the loopback address.
@@ -64,7 +64,7 @@ const redirectExternalRule = "PREROUTING " + // For remote traffic
 const resetLocalRule = "INPUT " + // For traffic traversing the INPUT chain
 	"-i lo " + // On the loopback interface
 	"-s 127.0.0.0/8 -d 127.0.0.0/8 " + // Coming from and directed to the loopback address
-	"-p tcp --dport %s " + // Directed to the upstream application's port
+	"-p tcp --dport %d " + // Directed to the upstream application's port
 	"-m state --state ESTABLISHED " + // That are already ESTABLISHED, i.e. not before they are redirected
 	"-j REJECT --reject-with tcp-reset" // Reject it
 
@@ -74,16 +74,16 @@ const resetLocalRule = "INPUT " + // For traffic traversing the INPUT chain
 // Connections from the proxy itself do not match this rule, as they are originated from the loopback address.
 const resetExternalRule = "INPUT " + // For traffic traversing the INPUT chain
 	"! -i lo " + // Not coming form loopback. This is technically not needed, but doesn't hurt and helps readability.
-	"-p tcp --dport %s " + // Directed to the upstream application's port
+	"-p tcp --dport %d " + // Directed to the upstream application's port
 	"-m state --state ESTABLISHED " + // That are already ESTABLISHED, i.e. not before they are redirected
 	"-j REJECT --reject-with tcp-reset" // Reject it
 
 // TrafficRedirectionSpec specifies the redirection of traffic to a destination
 type TrafficRedirectionSpec struct {
 	// ProxyPort is the port where the proxy is listening at.
-	ProxyPort string
+	ProxyPort uint
 	// TargetPort is the port of for the upstream application.
-	TargetPort string
+	TargetPort uint
 }
 
 // trafficRedirect defines an instance of a TrafficRedirector
@@ -97,12 +97,12 @@ func NewTrafficRedirector(
 	tr *TrafficRedirectionSpec,
 	executor runtime.Executor,
 ) (protocol.TrafficRedirector, error) {
-	if tr.TargetPort == "" || tr.ProxyPort == "" {
+	if tr.TargetPort == 0 || tr.ProxyPort == 0 {
 		return nil, fmt.Errorf("TargetPort and ProxyPort must be specified")
 	}
 
 	if tr.TargetPort == tr.ProxyPort {
-		return nil, fmt.Errorf("TargetPort (%s) and ProxyPort (%s) must be different", tr.TargetPort, tr.ProxyPort)
+		return nil, fmt.Errorf("TargetPort (%d) and ProxyPort (%d) must be different", tr.TargetPort, tr.ProxyPort)
 	}
 
 	return &redirector{
