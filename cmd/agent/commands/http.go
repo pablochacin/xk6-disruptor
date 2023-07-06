@@ -17,9 +17,9 @@ import (
 func BuildHTTPCmd(env runtime.Environment, config *agent.Config) *cobra.Command {
 	disruption := http.Disruption{}
 	var duration time.Duration
-	var port string
+	var port uint
 	var targetHost string
-	var targetPort string
+	var targetPort uint
 	transparent := true
 
 	cmd := &cobra.Command{
@@ -29,11 +29,12 @@ func BuildHTTPCmd(env runtime.Environment, config *agent.Config) *cobra.Command 
 			" When running as a transparent proxy requires NET_ADMIM capabilities for setting" +
 			" iptable rules.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if targetPort == "" {
+			if targetPort == 0 {
 				return fmt.Errorf("target port for fault injection is required")
 			}
-			listenAddress := net.JoinHostPort("", port)
-			upstreamAddress := "http://" + net.JoinHostPort(targetHost, targetPort)
+
+			listenAddress := net.JoinHostPort("", fmt.Sprint(port))
+			upstreamAddress := "http://" + net.JoinHostPort(targetHost, fmt.Sprint(targetPort))
 
 			proxyConfig := http.ProxyConfig{
 				ListenAddress:   listenAddress,
@@ -87,8 +88,8 @@ func BuildHTTPCmd(env runtime.Environment, config *agent.Config) *cobra.Command 
 	cmd.Flags().BoolVar(&transparent, "transparent", true, "run as transparent proxy")
 	cmd.Flags().StringVar(&targetHost, "upstream-host", "localhost",
 		"upstream host to redirect traffic to")
-	cmd.Flags().StringVarP(&port, "port", "p", "8080", "port the proxy will listen to")
-	cmd.Flags().StringVarP(&targetPort, "target", "t", "", "port the proxy will redirect request to")
+	cmd.Flags().UintVarP(&port, "port", "p", 8080, "port the proxy will listen to")
+	cmd.Flags().UintVarP(&targetPort, "target", "t", 0, "port the proxy will redirect request to")
 
 	return cmd
 }

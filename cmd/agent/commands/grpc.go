@@ -18,9 +18,9 @@ import (
 func BuildGrpcCmd(env runtime.Environment, config *agent.Config) *cobra.Command {
 	disruption := grpc.Disruption{}
 	var duration time.Duration
-	var port string
+	var port uint
 	var targetHost string
-	var targetPort string
+	var targetPort uint
 	transparent := true
 
 	cmd := &cobra.Command{
@@ -30,11 +30,12 @@ func BuildGrpcCmd(env runtime.Environment, config *agent.Config) *cobra.Command 
 			" When running as a transparent proxy requires NET_ADMIM capabilities for setting" +
 			" iptable rules.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if targetPort == "" {
+			if targetPort == 0 {
 				return fmt.Errorf("target port for fault injection is required")
 			}
-			listenAddress := net.JoinHostPort("", port)
-			upstreamAddress := net.JoinHostPort(targetHost, targetPort)
+
+			listenAddress := net.JoinHostPort("", fmt.Sprint(port))
+			upstreamAddress := net.JoinHostPort(targetHost, fmt.Sprint(targetPort))
 
 			proxyConfig := grpc.ProxyConfig{
 				ListenAddress:   listenAddress,
@@ -82,8 +83,8 @@ func BuildGrpcCmd(env runtime.Environment, config *agent.Config) *cobra.Command 
 	cmd.Flags().Int32VarP(&disruption.StatusCode, "status", "s", 0, "status code")
 	cmd.Flags().Float32VarP(&disruption.ErrorRate, "rate", "r", 0, "error rate")
 	cmd.Flags().StringVarP(&disruption.StatusMessage, "message", "m", "", "error message for injected faults")
-	cmd.Flags().StringVarP(&port, "port", "p", "8080", "port the proxy will listen to")
-	cmd.Flags().StringVarP(&targetPort, "target", "t", "", "port the proxy will redirect request to")
+	cmd.Flags().UintVarP(&port, "port", "p", 8080, "port the proxy will listen to")
+	cmd.Flags().UintVarP(&targetPort, "target", "t", 0, "port the proxy will redirect request to")
 	cmd.Flags().StringSliceVarP(&disruption.Excluded, "exclude", "x", []string{}, "comma-separated list of grpc services"+
 		" to be excluded from disruption")
 	cmd.Flags().BoolVar(&transparent, "transparent", true, "run as transparent proxy")
