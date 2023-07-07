@@ -5,6 +5,8 @@ package e2e
 
 import (
 	"context"
+	"fmt"
+	"net"
 	"testing"
 	"time"
 
@@ -17,6 +19,7 @@ import (
 	"github.com/grafana/xk6-disruptor/pkg/testutils/e2e/cluster"
 	"github.com/grafana/xk6-disruptor/pkg/testutils/e2e/deploy"
 	"github.com/grafana/xk6-disruptor/pkg/testutils/e2e/fixtures"
+	"github.com/grafana/xk6-disruptor/pkg/testutils/e2e/kubectl"
 	"github.com/grafana/xk6-disruptor/pkg/testutils/e2e/kubernetes/namespace"
 )
 
@@ -52,10 +55,10 @@ func Test_PodDisruptor(t *testing.T) {
 			check    checks.Check
 		}{
 			{
-				title:    "Inject Http error 500",
-				pod:      fixtures.BuildHttpbinPod(),
-				service:  fixtures.BuildHttpbinService(),
-				port:     80,
+				title:   "Inject Http error 500",
+				pod:     fixtures.BuildHttpbinPod(),
+				service: fixtures.BuildHttpbinService(),
+				port:    80,
 				injector: func(d disruptors.PodDisruptor) error {
 					fault := disruptors.HTTPFault{
 						Port:      80,
@@ -89,7 +92,7 @@ func Test_PodDisruptor(t *testing.T) {
 						StatusCode: 14,
 						Exclude:    "grpc.reflection.v1alpha.ServerReflection,grpc.reflection.v1.ServerReflection",
 					}
-					options:= disruptors.GrpcDisruptionOptions{
+					options := disruptors.GrpcDisruptionOptions{
 						ProxyPort: 3000,
 					}
 
@@ -154,16 +157,45 @@ func Test_PodDisruptor(t *testing.T) {
 				go func() {
 					err := tc.injector(disruptor)
 					if err != nil {
-						t.Logf("failed to setup disruptor: %v", err)
+						t.Errorf("failed to setup disruptor: %v", err)
 						return
 					}
 				}()
 
-				err = tc.check.Verify(k8s, cluster.Ingress(), namespace)
-				if err != nil {
-					t.Errorf("failed to access service: %v", err)
-					return
-				}
+				t.Run("on ingress", func(t *testing.T) {
+					t.Parallel()
+
+					err := tc.check.Verify(k8s, cluster.Ingress(), namespace)
+					if err != nil {
+						t.Fatalf("failed to access service: %v", err)
+						return
+					}
+				})
+
+				t.Run("on port-forward", func(t *testing.T) {
+					t.Parallel()
+
+					ctx, cancel := context.WithCancel(context.Background())
+					t.Cleanup(func() {
+						cancel()
+					})
+
+					kc, err := kubectl.NewFromKubeconfig(ctx, cluster.Kubeconfig())
+					if err != nil {
+						t.Fatalf("creating kubectl client from kubeconfig: %v", err)
+					}
+
+					port, err := kc.ForwardPodPort(ctx, namespace, tc.pod.Name, uint(tc.port))
+					if err != nil {
+						t.Fatalf("forwarding port from %s/%s: %v", namespace, tc.pod, err)
+					}
+
+					err = tc.check.Verify(k8s, net.JoinHostPort("localhost", fmt.Sprint(port)), namespace)
+					if err != nil {
+						t.Errorf("failed to access service: %v", err)
+						return
+					}
+				})
 			})
 		}
 	})
