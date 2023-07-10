@@ -34,6 +34,9 @@ var injectHTTP500 = []string{
 	"8080",
 	"--target",
 	"80",
+	"--upstream-host",
+	// Disruptors set this to the pod IP, but we don't know it for this test. Any IP that is not 127.0.0.1 will work.
+	"127.1.2.3",
 }
 
 var injectGrpcInternal = []string{
@@ -51,6 +54,9 @@ var injectGrpcInternal = []string{
 	"4000",
 	"--target",
 	"9000",
+	"--upstream-host",
+	// Disruptors set this to the pod IP, but we don't know it for this test. Any IP that is not 127.0.0.1 will work.
+	"127.1.2.3",
 	"-x",
 	// exclude reflection service otherwise the dynamic client will not work
 	"grpc.reflection.v1alpha.ServerReflection,grpc.reflection.v1.ServerReflection",
@@ -121,10 +127,8 @@ func buildGrpcbinPodWithDisruptorAgent(cmd []string) *corev1.Pod {
 		Build()
 }
 
-
 // deploy pod with the xk6-disruptor
 func buildDisruptorAgentPod(cmd []string) *corev1.Pod {
-
 	agent := builders.NewContainerBuilder("xk6-disruptor-agent").
 		WithImage("ghcr.io/grafana/xk6-disruptor-agent").
 		WithPort("http", 80).
@@ -141,7 +145,6 @@ func buildDisruptorAgentPod(cmd []string) *corev1.Pod {
 		WithContainer(*agent).
 		Build()
 }
-
 
 // builDisruptorService returns a Service definition that exposes httpbin pods
 func builDisruptorService() *corev1.Service {
@@ -284,7 +287,6 @@ func Test_Agent(t *testing.T) {
 			t.Errorf("unexpected error: %s: ", string(stderr))
 		}
 	})
-
 
 	t.Run("Non-transparent proxy to upstream service", func(t *testing.T) {
 		t.Parallel()
