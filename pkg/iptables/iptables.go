@@ -87,10 +87,12 @@ const resetProxyRule = "INPUT " + // Traffic flowing through the INPUT chain
 
 // TrafficRedirectionSpec specifies the redirection of traffic to a destination
 type TrafficRedirectionSpec struct {
-	// ProxyPort is the port where the proxy is listening at.
-	ProxyPort uint
-	// TargetPort is the port of for the upstream application.
-	TargetPort uint
+	// ToPort is the port where the traffic should be redirected to.
+	// Typically, this would be where a transparent proxy is listening.
+	ToPort uint
+	// FromPort is the port of for the upstream application.
+	// Typically, this would be the original port where the application is listening.
+	FromPort uint
 }
 
 // trafficRedirect defines an instance of a TrafficRedirector
@@ -104,12 +106,12 @@ func NewTrafficRedirector(
 	tr *TrafficRedirectionSpec,
 	executor runtime.Executor,
 ) (protocol.TrafficRedirector, error) {
-	if tr.TargetPort == 0 || tr.ProxyPort == 0 {
-		return nil, fmt.Errorf("TargetPort and ProxyPort must be specified")
+	if tr.FromPort == 0 || tr.ToPort == 0 {
+		return nil, fmt.Errorf("FromPort and ToPort must be specified")
 	}
 
-	if tr.TargetPort == tr.ProxyPort {
-		return nil, fmt.Errorf("TargetPort (%d) and ProxyPort (%d) must be different", tr.TargetPort, tr.ProxyPort)
+	if tr.FromPort == tr.ToPort {
+		return nil, fmt.Errorf("FromPort (%d) and ToPort (%d) must be different", tr.FromPort, tr.ToPort)
 	}
 
 	return &redirector{
@@ -122,13 +124,13 @@ func (tr *redirector) redirectRules() []string {
 	return []string{
 		fmt.Sprintf(
 			redirectLocalRule,
-			tr.TargetPort,
-			tr.ProxyPort,
+			tr.FromPort,
+			tr.ToPort,
 		),
 		fmt.Sprintf(
 			redirectExternalRule,
-			tr.TargetPort,
-			tr.ProxyPort,
+			tr.FromPort,
+			tr.ToPort,
 		),
 	}
 }
@@ -137,17 +139,17 @@ func (tr *redirector) resetRules() []string {
 	return []string{
 		fmt.Sprintf(
 			resetLocalRule,
-			tr.TargetPort,
+			tr.FromPort,
 		),
 		fmt.Sprintf(
 			resetExternalRule,
-			tr.TargetPort,
+			tr.FromPort,
 		),
 	}
 }
 
 func (tr *redirector) resetProxyRule() string {
-	return fmt.Sprintf(resetProxyRule, tr.ProxyPort)
+	return fmt.Sprintf(resetProxyRule, tr.ToPort)
 }
 
 // execIptables runs performs the specified action ("-A" or "-D") for the supplied rule.
