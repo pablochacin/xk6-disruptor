@@ -125,8 +125,8 @@ func Test_PodHTTPFaultInjection(t *testing.T) {
 				},
 			},
 			target: buildPodWithPort("my-app-pod", "http", 80),
-			// Lack of quotes on the -b arg is okay. Argument is returned as []string, and it is compared as string
-			// solely to make the test more readable.
+			// TODO: Make expectedCmd better represent the actual result ([]string), as it currently looks like we
+			// are asserting a broken behavior (e.g. lack of quotes in -b) which is not the case.
 			expectedCmd: "xk6-disruptor-agent http -d 60s -t 80 -r 0.1 -e 500 -b {\"error\": 500} --upstream-host 192.0.2.6",
 			expectError: false,
 			cmdError:    nil,
