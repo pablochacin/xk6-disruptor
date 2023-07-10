@@ -154,10 +154,12 @@ func Test_PodDisruptor(t *testing.T) {
 				}
 
 				// apply disruption in a go-routine as it is a blocking function
+				// TODO: We use Logf to avoid a panic-type error if `tc.injector` returns an error after the test times
+				// out and `t` is no longer valid, but we should improve this somehow.
 				go func() {
 					err := tc.injector(disruptor)
 					if err != nil {
-						t.Errorf("failed to setup disruptor: %v", err)
+						t.Logf("failed to setup disruptor: %v", err)
 						return
 					}
 				}()
