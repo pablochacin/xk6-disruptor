@@ -59,8 +59,8 @@ const redirectExternalRule = "PREROUTING " + // For remote traffic
 // resetLocalRule is a netfilter rule that resets established connections (i.e. that have not been redirected) coming
 // to and from the loopback address.
 // This rule matches connections from sidecars and `kubectl port-forward`.
-// Connections from the proxy itself do not match this rule, as they are directed to the pod's external IP and not
-// loopback.
+// Connections from the proxy itself do not match this rule, as although they flow through `lo`, they are directed to
+// the pod's external IP and not the loopback address.
 const resetLocalRule = "INPUT " + // For traffic traversing the INPUT chain
 	"-i lo " + // On the loopback interface
 	"-s 127.0.0.0/8 -d 127.0.0.0/8 " + // Coming from and directed to the loopback address
@@ -71,7 +71,7 @@ const resetLocalRule = "INPUT " + // For traffic traversing the INPUT chain
 // resetExternalRule is a netfilter rule that resets established connections (i.e. that have not been redirected) coming
 // from anywhere except the local IP.
 // This rule matches external connections to the pod's IP address.
-// Connections from the proxy itself do not match this rule, as they are originated from the loopback address.
+// Connections from the proxy itself do not match this rule, as they flow through the `lo` interface.
 const resetExternalRule = "INPUT " + // For traffic traversing the INPUT chain
 	"! -i lo " + // Not coming form loopback. This is technically not needed, but doesn't hurt and helps readability.
 	"-p tcp --dport %d " + // Directed to the upstream application's port
