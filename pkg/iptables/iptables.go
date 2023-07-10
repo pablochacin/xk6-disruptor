@@ -78,6 +78,13 @@ const resetExternalRule = "INPUT " + // For traffic traversing the INPUT chain
 	"-m state --state ESTABLISHED " + // That are already ESTABLISHED, i.e. not before they are redirected
 	"-j REJECT --reject-with tcp-reset" // Reject it
 
+// proxyResetRule is a netfilter rule that rejects traffic to the proxy.
+// This rule is set up after injection finishes to kill any leftover connection to the proxy.
+// TODO: Run some tests to check if this is really necessary, as the proxy may already be killing conns on termination.
+const resetProxyRule = "INPUT " + // Traffic flowing through the INPUT chain
+	"-p tcp --dport %d " + // Directed to the proxy port
+	"-j REJECT --reject-with tcp-reset" // Reject it
+
 // TrafficRedirectionSpec specifies the redirection of traffic to a destination
 type TrafficRedirectionSpec struct {
 	// ProxyPort is the port where the proxy is listening at.
@@ -139,6 +146,10 @@ func (tr *redirector) resetRules() []string {
 	}
 }
 
+func (tr *redirector) resetProxyRule() string {
+	return fmt.Sprintf(resetProxyRule, tr.ProxyPort)
+}
+
 // execIptables runs performs the specified action ("-A" or "-D") for the supplied rule.
 func (tr *redirector) execIptables(action string, rule string) error {
 	cmd := fmt.Sprintf("%s %s", action, rule)
@@ -152,6 +163,9 @@ func (tr *redirector) execIptables(action string, rule string) error {
 
 // Start applies the TrafficRedirect
 func (tr *redirector) Start() error {
+	// Remove reset rule for the proxy in case it exists from a previous run.
+	_ = tr.execIptables("-D", tr.resetProxyRule())
+
 	for _, rule := range tr.redirectRules() {
 		err := tr.execIptables("-A", rule)
 		if err != nil {
@@ -188,6 +202,12 @@ func (tr *redirector) Stop() error {
 		if err != nil {
 			errs = append(errs, err.Error())
 		}
+	}
+
+	// Add rule to terminate any remaining traffic directed to the proxy.
+	err := tr.execIptables("-A", tr.resetProxyRule())
+	if err != nil {
+		errs = append(errs, err.Error())
 	}
 
 	if len(errs) > 0 {
