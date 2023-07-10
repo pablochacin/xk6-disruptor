@@ -42,7 +42,7 @@ import (
 // as the proxy targets the pod IP and not the loopback address.
 const redirectLocalRule = "OUTPUT " + // For local traffic
 	"-t nat " + // Traversing the nat table
-	"-s 127.0.0.0/8 -d 127.0.0.0/8 " + // Coming from and directed to the loopback address, i.e. not the pod IP.
+	"-s 127.0.0.0/8 -d 127.0.0.1/32 " + // Coming from and directed to localhost, i.e. not the pod IP.
 	"-p tcp --dport %d " + // Sent to the upstream application's port
 	"-j REDIRECT --to-port %d" // Forward it to the proxy address
 
@@ -63,7 +63,7 @@ const redirectExternalRule = "PREROUTING " + // For remote traffic
 // the pod's external IP and not the loopback address.
 const resetLocalRule = "INPUT " + // For traffic traversing the INPUT chain
 	"-i lo " + // On the loopback interface
-	"-s 127.0.0.0/8 -d 127.0.0.0/8 " + // Coming from and directed to the loopback address
+	"-s 127.0.0.0/8 -d 127.0.0.1/32 " + // Coming from and directed to localhost
 	"-p tcp --dport %d " + // Directed to the upstream application's port
 	"-m state --state ESTABLISHED " + // That are already ESTABLISHED, i.e. not before they are redirected
 	"-j REJECT --reject-with tcp-reset" // Reject it
