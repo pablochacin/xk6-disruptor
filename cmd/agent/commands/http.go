@@ -58,8 +58,8 @@ func BuildHTTPCmd(env runtime.Environment, config *agent.Config) *cobra.Command 
 			var redirector protocol.TrafficRedirector
 			if transparent {
 				tr := &iptables.TrafficRedirectionSpec{
-					FromPort: targetPort, // Redirect traffic from the application (target) port...
-					ToPort:   port,       // to the proxy port.
+					DestinationPort: targetPort, // Redirect traffic from the application (target) port...
+					RedirectPort:    port,       // to the proxy port.
 				}
 
 				redirector, err = iptables.NewTrafficRedirector(tr, env.Executor())

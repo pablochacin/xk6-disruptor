@@ -20,16 +20,16 @@ func Test_validateTrafficRedirect(t *testing.T) {
 		{
 			title: "Valid redirect",
 			redirect: TrafficRedirectionSpec{
-				FromPort: 80,
-				ToPort:   8080,
+				DestinationPort: 80,
+				RedirectPort:    8080,
 			},
 			expectError: false,
 		},
 		{
 			title: "Same target and proxy port",
 			redirect: TrafficRedirectionSpec{
-				FromPort: 8080,
-				ToPort:   8080,
+				DestinationPort: 8080,
+				RedirectPort:    8080,
 			},
 			expectError: true,
 		},
@@ -77,8 +77,8 @@ func Test_Commands(t *testing.T) {
 		{
 			title: "Start valid redirect",
 			redirect: TrafficRedirectionSpec{
-				FromPort: 80,
-				ToPort:   8080,
+				DestinationPort: 80,
+				RedirectPort:    8080,
 			},
 			testFunction: func(tr protocol.TrafficRedirector) error {
 				return tr.Start()
@@ -97,8 +97,8 @@ func Test_Commands(t *testing.T) {
 		{
 			title: "Stop active redirect",
 			redirect: TrafficRedirectionSpec{
-				FromPort: 80,
-				ToPort:   8080,
+				DestinationPort: 80,
+				RedirectPort:    8080,
 			},
 			testFunction: func(tr protocol.TrafficRedirector) error {
 				return tr.Stop()
@@ -117,8 +117,8 @@ func Test_Commands(t *testing.T) {
 		{
 			title: "Error invoking iptables command in Start",
 			redirect: TrafficRedirectionSpec{
-				FromPort: 80,
-				ToPort:   8080,
+				DestinationPort: 80,
+				RedirectPort:    8080,
 			},
 			testFunction: func(tr protocol.TrafficRedirector) error {
 				return tr.Start()
@@ -131,8 +131,8 @@ func Test_Commands(t *testing.T) {
 		{
 			title: "Error invoking iptables command in Stop",
 			redirect: TrafficRedirectionSpec{
-				FromPort: 80,
-				ToPort:   8080,
+				DestinationPort: 80,
+				RedirectPort:    8080,
 			},
 			testFunction: func(tr protocol.TrafficRedirector) error {
 				return tr.Stop()
