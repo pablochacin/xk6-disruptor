@@ -5,11 +5,10 @@ package e2e
 
 import (
 	"context"
+	"fmt"
+	"net"
 	"testing"
 	"time"
-
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"github.com/grafana/xk6-disruptor/pkg/disruptors"
 	"github.com/grafana/xk6-disruptor/pkg/kubernetes"
@@ -17,17 +16,23 @@ import (
 	"github.com/grafana/xk6-disruptor/pkg/testutils/e2e/cluster"
 	"github.com/grafana/xk6-disruptor/pkg/testutils/e2e/deploy"
 	"github.com/grafana/xk6-disruptor/pkg/testutils/e2e/fixtures"
+	"github.com/grafana/xk6-disruptor/pkg/testutils/e2e/kubectl"
 	"github.com/grafana/xk6-disruptor/pkg/testutils/e2e/kubernetes/namespace"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-func Test_PodDisruptor(t *testing.T) {
+// Test_Redirection checks that the disruptors successfully redirect traffic both port-forwarded and send through
+// an ingress.
+// It does so by injecting a simple fault that changes the error code the upstream server would return.
+func Test_Redirection(t *testing.T) {
 	t.Parallel()
 
 	cluster, err := cluster.BuildE2eCluster(
 		t,
 		cluster.DefaultE2eClusterConfig(),
-		cluster.WithName("e2e-pod-disruptor"),
-		cluster.WithIngressPort(30082),
+		cluster.WithName("e2e-disruptor-agent"),
+		cluster.WithIngressPort(30084),
 	)
 	if err != nil {
 		t.Errorf("failed to create cluster: %v", err)
@@ -40,7 +45,7 @@ func Test_PodDisruptor(t *testing.T) {
 		return
 	}
 
-	t.Run("Test fault injection", func(t *testing.T) {
+	t.Run("Test redirection", func(t *testing.T) {
 		t.Parallel()
 
 		testCases := []struct {
@@ -52,7 +57,7 @@ func Test_PodDisruptor(t *testing.T) {
 			check    checks.Check
 		}{
 			{
-				title:   "Inject Http error 500",
+				title:   "Inject status 418",
 				pod:     fixtures.BuildHttpbinPod(),
 				service: fixtures.BuildHttpbinService(),
 				port:    80,
@@ -60,20 +65,18 @@ func Test_PodDisruptor(t *testing.T) {
 					fault := disruptors.HTTPFault{
 						Port:      80,
 						ErrorRate: 1.0,
-						ErrorCode: 500,
-					}
-					options := disruptors.HTTPDisruptionOptions{
-						ProxyPort: 8080,
+						// Test with a status code unlikely to be used by ingress controllers or the disruptor proxy.
+						ErrorCode: 418,
 					}
 
-					return d.InjectHTTPFaults(context.TODO(), fault, 10*time.Second, options)
+					return d.InjectHTTPFaults(context.TODO(), fault, 10*time.Second, disruptors.HTTPDisruptionOptions{})
 				},
 				check: checks.HTTPCheck{
 					Service:      "httpbin",
 					Method:       "GET",
 					Path:         "/status/200",
 					Body:         []byte{},
-					ExpectedCode: 500,
+					ExpectedCode: 418,
 					Delay:        5 * time.Second,
 				},
 			},
@@ -111,7 +114,7 @@ func Test_PodDisruptor(t *testing.T) {
 			t.Run(tc.title, func(t *testing.T) {
 				t.Parallel()
 
-				namespace, err := namespace.CreateTestNamespace(context.TODO(), t, k8s.Client())
+				ns, err := namespace.CreateTestNamespace(context.TODO(), t, k8s.Client())
 				if err != nil {
 					t.Errorf("failed to create test namespace: %v", err)
 					return
@@ -119,7 +122,7 @@ func Test_PodDisruptor(t *testing.T) {
 
 				err = deploy.ExposeApp(
 					k8s,
-					namespace,
+					ns,
 					tc.pod,
 					tc.service,
 					intstr.FromInt(tc.port),
@@ -132,7 +135,7 @@ func Test_PodDisruptor(t *testing.T) {
 
 				// create pod disruptor that will select the service's pods
 				selector := disruptors.PodSelector{
-					Namespace: namespace,
+					Namespace: ns,
 					Select: disruptors.PodAttributes{
 						Labels: tc.service.Spec.Selector,
 					},
@@ -151,6 +154,8 @@ func Test_PodDisruptor(t *testing.T) {
 				}
 
 				// apply disruption in a go-routine as it is a blocking function
+				// TODO: We use Logf to avoid a panic-type error if `tc.injector` returns an error after the test times
+				// out and `t` is no longer valid, but we should improve this somehow.
 				go func() {
 					err := tc.injector(disruptor)
 					if err != nil {
@@ -159,11 +164,40 @@ func Test_PodDisruptor(t *testing.T) {
 					}
 				}()
 
-				err = tc.check.Verify(k8s, cluster.Ingress(), namespace)
-				if err != nil {
-					t.Errorf("failed to access service: %v", err)
-					return
-				}
+				t.Run("on ingress", func(t *testing.T) {
+					t.Parallel()
+
+					err := tc.check.Verify(k8s, cluster.Ingress(), ns)
+					if err != nil {
+						t.Errorf("failed to access service: %v", err)
+						return
+					}
+				})
+
+				t.Run("on port-forward", func(t *testing.T) {
+					t.Parallel()
+
+					ctx, cancel := context.WithCancel(context.Background())
+					t.Cleanup(func() {
+						cancel()
+					})
+
+					kc, err := kubectl.NewFromKubeconfig(ctx, cluster.Kubeconfig())
+					if err != nil {
+						t.Fatalf("creating kubectl client from kubeconfig: %v", err)
+					}
+
+					port, err := kc.ForwardPodPort(ctx, ns, tc.pod.Name, uint(tc.port))
+					if err != nil {
+						t.Fatalf("forwarding port from %s/%s: %v", ns, tc.pod, err)
+					}
+
+					err = tc.check.Verify(k8s, net.JoinHostPort("localhost", fmt.Sprint(port)), ns)
+					if err != nil {
+						t.Errorf("failed to access service: %v", err)
+						return
+					}
+				})
 			})
 		}
 	})
